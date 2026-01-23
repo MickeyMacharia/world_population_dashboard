@@ -4,6 +4,37 @@ import plotly.express as px
 
 st.set_page_config(page_title="Compare Countries", page_icon="🌐")
 
+# Initialize data if not in session state
+if "df_long_with_world" not in st.session_state:
+    @st.cache_data
+    def load_data():
+        df = pd.read_csv("world_population.csv")
+        return df
+    
+    @st.cache_data
+    def transform_data():
+        df_original = load_data()
+        year_columns = [col for col in df_original.columns if 'Population' in col and col != 'World Population Percentage']
+        df_long = df_original[['Country', 'Continent'] + year_columns].copy()
+        df_long = pd.melt(df_long, id_vars=['Country', 'Continent'], value_vars=year_columns, var_name='Year', value_name='Population')
+        df_long['Year'] = df_long['Year'].str.extract(r'(\d{4})').astype(int)
+        df_long['Population'] = pd.to_numeric(df_long['Population'], errors='coerce')
+        df_long = df_long.dropna(subset=['Population']).copy()
+        df_long = df_long.sort_values(['Country', 'Year']).reset_index(drop=True)
+        df_long['Growth_Rate'] = df_long.groupby('Country')['Population'].pct_change() * 100
+        world_pop = df_long.groupby('Year')['Population'].sum().reset_index()
+        world_pop['Country'] = 'World'
+        world_pop['Continent'] = 'World'
+        world_pop['Growth_Rate'] = world_pop['Population'].pct_change() * 100
+        df_long_with_world = pd.concat([df_long, world_pop], ignore_index=True)
+        return df_original, df_long, df_long_with_world
+    
+    df_original, df_long, df_long_with_world = transform_data()
+    st.session_state.df_original = df_original
+    st.session_state.df_long = df_long
+    st.session_state.df_long_with_world = df_long_with_world
+    st.session_state.template = "plotly"
+
 st.title("🌐 Compare Countries")
 st.markdown("Compare population trends across multiple countries")
 
